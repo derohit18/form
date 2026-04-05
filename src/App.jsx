@@ -86,10 +86,8 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // --- MATRIX GENERATION LOGIC ---
-  const highestPos = forms.length > 0 ? Math.max(...forms.map(f => f.position || 0)) : -1;
-  const minimumCells = 6;
-  const requiredCells = Math.max(minimumCells, Math.ceil((highestPos + 1) / 3) * 3 + 3);
+// --- MATRIX GENERATION LOGIC ---
+  const requiredCells = 6; // 🔴 STRICT LOCK: Exactly 6 slots, no infinite expansion.
   
   const gridCells = Array.from({ length: requiredCells }, () => []);
   forms.forEach(form => {
