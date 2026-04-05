@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Trash2, X, Move, Hand, LayoutGrid, Settings2 } from 'lucide-react';
+import { Search, Plus, Trash2, X, Move, Hand, LayoutGrid, Settings2, Lock, Unlock } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
@@ -14,7 +14,6 @@ const firebaseConfig = {
   appId: "1:95605491366:web:ec7ea3ace7640f277a5667"
 };
 
-// Initialize the Database Brain
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -27,11 +26,14 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Modal & Spatial State
+  // Modal, Spatial, and Security State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [targetPosition, setTargetPosition] = useState(null);
   const [editingForm, setEditingForm] = useState(null);
   const [formData, setFormData] = useState({ name: '' });
+  
+  // 🟢 NEW: Global Lock State (Defaults to true for safety)
+  const [isLocked, setIsLocked] = useState(true);
 
   // Drag & Drop / Mobile Selection State
   const [draggedFormId, setDraggedFormId] = useState(null);
@@ -53,11 +55,9 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- DATA FETCHING (With 5-Segment Path & Armored Sorting) ---
+  // --- DATA FETCHING ---
   useEffect(() => {
     if (!user) return;
-    
-    // Correct odd-number path: collection -> doc -> collection -> doc -> collection
     const collectionRef = collection(db, 'artifacts', branchId, 'public', 'data', 'shelf_forms');
     
     const unsubscribe = onSnapshot(
@@ -68,7 +68,6 @@ export default function App() {
           ...doc.data()
         }));
         
-        // Armored sorting: Prevents crashes if a document has no 'name' field
         fetchedForms.sort((a, b) => {
           const nameA = typeof a.name === 'string' ? a.name : "";
           const nameB = typeof b.name === 'string' ? b.name : "";
@@ -118,6 +117,7 @@ export default function App() {
   };
 
   const handleCellTap = (position) => {
+    if (isLocked) return; // 🟢 SECURITY: Block tapping to move if locked
     if (selectedFormId) {
       moveForm(selectedFormId, position);
       setSelectedFormId(null);
@@ -126,6 +126,7 @@ export default function App() {
 
   const handleFormMainBodyTap = (e, form) => {
     e.stopPropagation(); 
+    if (isLocked) return; // 🟢 SECURITY: Block selecting if locked
     if (selectedFormId === form.id) {
       setSelectedFormId(null);
     } else {
@@ -133,7 +134,7 @@ export default function App() {
     }
   };
 
-  // --- SAVE & DELETE LOGIC (With 5-Segment Path) ---
+  // --- SAVE & DELETE LOGIC ---
   const handleSaveForm = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
@@ -168,8 +169,12 @@ export default function App() {
     }
   };
 
-  // --- DRAG AND DROP LOGIC (With 5-Segment Path) ---
+  // --- DRAG AND DROP LOGIC ---
   const handleDragStart = (e, formId) => {
+    if (isLocked) {
+      e.preventDefault(); // 🟢 SECURITY: Hard block on drag initiation
+      return;
+    }
     e.stopPropagation();
     setDraggedFormId(formId);
     e.dataTransfer.effectAllowed = "move";
@@ -177,11 +182,13 @@ export default function App() {
   };
 
   const handleDragOver = (e) => {
+    if (isLocked) return;
     e.preventDefault(); 
     e.dataTransfer.dropEffect = "move";
   };
 
   const handleDrop = (e, targetPos) => {
+    if (isLocked) return;
     e.preventDefault();
     e.stopPropagation();
     if (draggedFormId === null) return;
@@ -222,7 +229,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-white text-xl font-bold leading-tight uppercase tracking-wide">Bank of Baroda</h1>
-              <p className="text-[#FFF0E5] text-xs font-semibold tracking-wider">Multi-Form Matrix for NBP</p>
+              <p className="text-[#FFF0E5] text-xs font-semibold tracking-wider">Form Locator</p>
             </div>
           </div>
         </div>
@@ -251,14 +258,37 @@ export default function App() {
           />
         </div>
 
-        {/* INSTRUCTIONS */}
-        <div className="mb-4 text-center px-4">
-          <div className="inline-flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-200">
-            <Hand className="h-4 w-4 text-[#F47920]" />
-            <p className="text-[10px] sm:text-xs font-bold text-gray-600 uppercase tracking-widest">
-              Tap form text to Move | Tap ⚙️ to Edit
-            </p>
-          </div>
+        {/* INSTRUCTIONS & SECURITY TOGGLE */}
+        <div className="mb-4 flex flex-col sm:flex-row items-center justify-center gap-3 px-4">
+          
+          {/* 🟢 NEW: The Lock Toggle Button */}
+          <button 
+            onClick={() => {
+              setIsLocked(!isLocked);
+              setSelectedFormId(null); // Clear selections when toggling
+            }}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full shadow-sm font-bold text-[10px] sm:text-xs uppercase tracking-widest transition-colors border-2
+              ${isLocked 
+                ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' 
+                : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+              }
+            `}
+          >
+            {isLocked ? (
+              <><Lock className="h-4 w-4" /> Locked</>
+            ) : (
+              <><Unlock className="h-4 w-4" /> Unlocked</>
+            )}
+          </button>
+
+          {!isLocked && (
+            <div className="inline-flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-200 animate-in fade-in duration-300">
+              <Hand className="h-4 w-4 text-[#F47920]" />
+              <p className="text-[10px] sm:text-xs font-bold text-gray-600 uppercase tracking-widest">
+                Tap or Drag to Move
+              </p>
+            </div>
+          )}
         </div>
 
         {/* LOADING STATE */}
@@ -290,7 +320,7 @@ export default function App() {
                         min-h-[160px] flex flex-col relative transition-colors duration-200 p-1.5 sm:p-2
                         ${!isRightCol ? 'border-r-2 border-[#2C3E50]' : ''} 
                         ${!isBottomRow ? 'border-b-2 border-[#2C3E50]' : ''}
-                        ${isCellTargeted ? 'bg-orange-50 cursor-pointer ring-inset ring-2 ring-[#F47920] z-20' : 'bg-white hover:bg-gray-50'}
+                        ${isCellTargeted && !isLocked ? 'bg-orange-50 cursor-pointer ring-inset ring-2 ring-[#F47920] z-20' : 'bg-white hover:bg-gray-50'}
                       `}
                     >
                       {/* Cell Header */}
@@ -298,7 +328,7 @@ export default function App() {
                         <span className="text-[9px] font-black text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-sm uppercase tracking-wider">
                           Slot {index + 1}
                         </span>
-                        {isCellTargeted && <span className="text-[9px] font-bold text-[#F47920] animate-pulse">DROP HERE</span>}
+                        {isCellTargeted && !isLocked && <span className="text-[9px] font-bold text-[#F47920] animate-pulse">DROP HERE</span>}
                       </div>
 
                       {/* Form Stack Container */}
@@ -313,32 +343,35 @@ export default function App() {
                               key={form.id}
                               className={`
                                 flex flex-row items-stretch rounded shadow-sm border-l-4 transition-all relative group overflow-hidden
-                                ${isSelected ? 'bg-blue-50 border-[#F47920] shadow-md ring-1 ring-[#F47920]' : 'bg-white border-[#0055A5] border'}
+                                ${isSelected && !isLocked ? 'bg-blue-50 border-[#F47920] shadow-md ring-1 ring-[#F47920]' : 'bg-white border-[#0055A5] border'}
                                 ${isDimmed ? 'opacity-20 grayscale' : 'opacity-100'}
                               `}
                             >
                               {/* Left Side: Drag Target */}
                               <div 
-                                draggable
+                                draggable={!isLocked} // 🟢 SECURITY: Native browser physics shut off
                                 onDragStart={(e) => handleDragStart(e, form.id)}
                                 onClick={(e) => handleFormMainBodyTap(e, form)}
-                                className={`flex-grow p-1.5 sm:p-2 flex justify-between items-center gap-1 ${isSelected ? 'cursor-grabbing' : 'cursor-grab'}`}
+                                className={`flex-grow p-1.5 sm:p-2 flex justify-between items-center gap-1 
+                                  ${isLocked ? 'cursor-default' : (isSelected ? 'cursor-grabbing' : 'cursor-grab')}
+                                `}
                               >
                                 <h3 className={`font-bold text-[10px] sm:text-xs leading-tight uppercase break-words
-                                  ${isSelected ? 'text-[#F47920]' : 'text-[#0055A5]'}
+                                  ${isSelected && !isLocked ? 'text-[#F47920]' : 'text-[#0055A5]'}
                                 `}>
                                   {form.name}
                                 </h3>
-                                {isSelected && <Move className="h-3 w-3 text-[#F47920] flex-shrink-0" />}
+                                {/* Only show the move icon if unlocked */}
+                                {!isLocked && isSelected && <Move className="h-3 w-3 text-[#F47920] flex-shrink-0" />}
                               </div>
 
-                              {/* Right Side: Edit Target */}
+                              {/* Right Side: Edit Target (Still allowed even if grid is locked) */}
                               <button
                                 onClick={(e) => handleEditClick(e, form)}
                                 className={`
                                   flex items-center justify-center px-1.5 sm:px-2 border-l border-gray-200 
                                   hover:bg-[#0055A5] hover:text-white transition-colors
-                                  ${isSelected ? 'text-[#F47920] border-[#F47920]' : 'text-gray-400'}
+                                  ${isSelected && !isLocked ? 'text-[#F47920] border-[#F47920]' : 'text-gray-400'}
                                 `}
                                 aria-label="Edit Form"
                               >
@@ -349,18 +382,20 @@ export default function App() {
                         })}
                       </div>
 
-                      {/* Add Button */}
-                      <div className="absolute bottom-1 left-1 right-1">
-                        <button
-                          onClick={(e) => handleAddClick(e, index)}
-                          className={`w-full py-1.5 flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider rounded
-                            ${isCellTargeted ? 'opacity-0' : 'text-gray-400 bg-gray-50 hover:bg-[#0055A5] hover:text-white border border-dashed border-gray-300'}
-                            transition-colors
-                          `}
-                        >
-                          <Plus className="h-3 w-3" /> Add
-                        </button>
-                      </div>
+                      {/* Add Button - Hidden when Locked for a cleaner view */}
+                      {!isLocked && (
+                        <div className="absolute bottom-1 left-1 right-1 animate-in fade-in duration-200">
+                          <button
+                            onClick={(e) => handleAddClick(e, index)}
+                            className={`w-full py-1.5 flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider rounded
+                              ${isCellTargeted ? 'opacity-0' : 'text-gray-400 bg-gray-50 hover:bg-[#0055A5] hover:text-white border border-dashed border-gray-300'}
+                              transition-colors
+                            `}
+                          >
+                            <Plus className="h-3 w-3" /> Add
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
