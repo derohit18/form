@@ -14,7 +14,7 @@ const firebaseConfig = {
   appId: "1:95605491366:web:ec7ea3ace7640f277a5667"
 };
 
-// 🟢 CRITICAL FIX: Re-wiring the Authentication and Database connections
+// Initialize the Database Brain
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -44,7 +44,7 @@ export default function App() {
         await signInAnonymously(auth);
       } catch (err) {
         console.error("Auth Error:", err);
-        setError("Authentication failed. Check your Firebase Config keys.");
+        setError("Authentication failed. Check your Firebase permissions.");
         setLoading(false);
       }
     };
@@ -53,10 +53,12 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- DATA FETCHING ---
+  // --- DATA FETCHING (With 5-Segment Path & Armored Sorting) ---
   useEffect(() => {
     if (!user) return;
-    const collectionRef = collection(db, 'artifacts', branchId, 'public', 'data');
+    
+    // Correct odd-number path: collection -> doc -> collection -> doc -> collection
+    const collectionRef = collection(db, 'artifacts', branchId, 'public', 'data', 'shelf_forms');
     
     const unsubscribe = onSnapshot(
       collectionRef,
@@ -65,13 +67,20 @@ export default function App() {
           id: doc.id,
           ...doc.data()
         }));
-        fetchedForms.sort((a, b) => a.name.localeCompare(b.name));
+        
+        // Armored sorting: Prevents crashes if a document has no 'name' field
+        fetchedForms.sort((a, b) => {
+          const nameA = typeof a.name === 'string' ? a.name : "";
+          const nameB = typeof b.name === 'string' ? b.name : "";
+          return nameA.localeCompare(nameB);
+        });
+        
         setForms(fetchedForms);
         setLoading(false);
       },
       (err) => {
         console.error("Firestore Error:", err);
-        setError("Database connection failed. Did you enable Firestore in Test Mode?");
+        setError("Database connection failed. Check your Firebase Rules.");
         setLoading(false);
       }
     );
@@ -124,15 +133,15 @@ export default function App() {
     }
   };
 
-  // --- SAVE & DELETE LOGIC ---
+  // --- SAVE & DELETE LOGIC (With 5-Segment Path) ---
   const handleSaveForm = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
 
     try {
-      const collectionRef = collection(db, 'artifacts', branchId, 'public', 'data');
+      const collectionRef = collection(db, 'artifacts', branchId, 'public', 'data', 'shelf_forms');
       if (editingForm) {
-        const docRef = doc(db, 'artifacts', branchId, 'public', 'data', editingForm.id);
+        const docRef = doc(db, 'artifacts', branchId, 'public', 'data', 'shelf_forms', editingForm.id);
         await updateDoc(docRef, { name: formData.name.trim(), updatedAt: new Date().toISOString() });
       } else {
         await addDoc(collectionRef, {
@@ -151,7 +160,7 @@ export default function App() {
   const handleDelete = async (id) => {
     if (!window.confirm("Remove this form from the shelf completely?")) return;
     try {
-      const docRef = doc(db, 'artifacts', branchId, 'public', 'data', id);
+      const docRef = doc(db, 'artifacts', branchId, 'public', 'data', 'shelf_forms', id);
       await deleteDoc(docRef);
       setIsModalOpen(false); 
     } catch (err) {
@@ -159,7 +168,7 @@ export default function App() {
     }
   };
 
-  // --- DRAG AND DROP LOGIC ---
+  // --- DRAG AND DROP LOGIC (With 5-Segment Path) ---
   const handleDragStart = (e, formId) => {
     e.stopPropagation();
     setDraggedFormId(formId);
@@ -188,7 +197,7 @@ export default function App() {
 
   const moveForm = async (formId, targetPos) => {
     try {
-      const docRef = doc(db, 'artifacts', branchId, 'public', 'data', formId);
+      const docRef = doc(db, 'artifacts', branchId, 'public', 'data', 'shelf_forms', formId);
       await updateDoc(docRef, { position: targetPos });
     } catch (err) {
       console.error("Move Error:", err);
