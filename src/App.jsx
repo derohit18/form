@@ -221,7 +221,7 @@ export default function App() {
               <span className="text-[#F47920] font-black text-2xl tracking-tighter">B</span>
             </div>
             <div>
-              <h1 className="text-white text-xl font-bold leading-tight uppercase tracking-wide">Spatial Locator</h1>
+              <h1 className="text-white text-xl font-bold leading-tight uppercase tracking-wide">Bank of Baroda</h1>
               <p className="text-[#FFF0E5] text-xs font-semibold tracking-wider">Multi-Form Matrix</p>
             </div>
           </div>
